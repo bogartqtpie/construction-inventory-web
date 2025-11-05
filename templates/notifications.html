@@ -14,14 +14,54 @@
                     <strong class="text-danger"><i class="bi bi-exclamation-triangle"></i> {{ n.name }}</strong> —
                     {{ n.qty }} {{ n.unit if n.unit else '' }}
                     {% if n.pred_days is not none %}
-                    <small class="text-muted"> | Est. depletion in <strong>{{ n.pred_days|round(1) }}</strong>
+                    <small class="text-muted">| Est. depletion in <strong>{{ n.pred_days|round(1) }}</strong>
                         days</small>
                     {% endif %}
                 </div>
-                <div>
-                    <a href="{{ url_for('edit_material', id=n.id) }}" class="btn btn-sm btn-outline-primary">
-                        <i class="bi bi-box-arrow-in-down"></i> Restock
+
+                <div class="d-flex align-items-center gap-2">
+                    {% set reorder = n.reorder_requests|first %}
+
+                    {% if reorder %}
+                    {% if reorder.status == 'Pending' %}
+                    <form action="{{ url_for('update_reorder_status', id=reorder.id) }}" method="POST" class="d-inline">
+                        <input type="hidden" name="status" value="Ordered">
+                        <button type="submit" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-hourglass-split"></i> Mark Ordered
+                        </button>
+                    </form>
+                    <span class="badge bg-warning text-dark px-3 py-2">
+                        <i class="bi bi-clock-history"></i> Pending
+                    </span>
+
+                    {% elif reorder.status == 'Ordered' %}
+                    <form action="{{ url_for('update_reorder_status', id=reorder.id) }}" method="POST" class="d-inline">
+                        <input type="hidden" name="status" value="Received">
+                        <button type="submit" class="btn btn-outline-success btn-sm">
+                            <i class="bi bi-truck"></i> Mark Received
+                        </button>
+                    </form>
+                    <span class="badge bg-info text-dark px-3 py-2">
+                        <i class="bi bi-truck"></i> Ordered
+                    </span>
+
+                    {% elif reorder.status == 'Received' %}
+                    <button class="btn btn-outline-secondary btn-sm" disabled>
+                        <i class="bi bi-check2-circle"></i> Completed
+                    </button>
+                    <span class="badge bg-success px-3 py-2">
+                        <i class="bi bi-check-circle"></i> Received
+                    </span>
+                    {% endif %}
+                    {% else %}
+                    <a href="{{ url_for('order_material', material_id=n.id) }}"
+                        class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-cart-plus"></i> Order
                     </a>
+                    <span class="badge bg-secondary px-3 py-2">
+                        <i class="bi bi-dash-circle"></i> No Order Yet
+                    </span>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}

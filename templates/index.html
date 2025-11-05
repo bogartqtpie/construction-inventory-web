@@ -74,7 +74,7 @@
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-sm align-middle">
+                    <table class="table table-sm align-middle" id="inventory-table">
                         <thead class="table-light">
                             <tr>
                                 <th>Material</th>
@@ -113,6 +113,28 @@
                     to record sales and automatically deduct stock. Low-stock items will
                     appear in <strong>Notifications</strong>.
                 </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ✅ Checkout Success Modal -->
+<div class="modal fade" id="checkoutSuccessModal" tabindex="-1" aria-labelledby="checkoutSuccessModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-success">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="checkoutSuccessModalLabel">
+                    <i class="bi bi-check-circle-fill"></i> Checkout Successful
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">Your checkout has been completed successfully.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-success" data-bs-dismiss="modal">OK</button>
             </div>
         </div>
     </div>
@@ -185,27 +207,38 @@
         document.getElementById("checkout").addEventListener("click", async () => {
             if (!cart.length) return alert("Cart is empty!");
 
-            const response = await fetch("/checkout", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ cart })
-            });
+            try {
+                const response = await fetch("/checkout", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ cart })
+                });
 
-            const result = await response.json();
+                if (!response.ok) throw new Error("Server error: " + response.status);
 
-            if (result.success) {
-                alert("Checkout complete!");
-                cart.length = 0;
-                renderCart();
-                updateInventoryTable(result.updated_inventory);
-            } else {
-                alert("Error: " + result.message);
+                const result = await response.json();
+
+                if (result.success) {
+                    // Show Bootstrap modal instead of alert
+                    const modal = new bootstrap.Modal(document.getElementById("checkoutSuccessModal"));
+                    modal.show();
+
+                    cart.length = 0;
+                    renderCart();
+                    if (result.updated_inventory) {
+                        updateInventoryTable(result.updated_inventory);
+                    }
+                } else {
+                    alert("Error: " + (result.message || "Unknown error"));
+                }
+            } catch (err) {
+                alert("Checkout failed: " + err.message);
             }
         });
 
-        // Update quick inventory table automatically
+        // Update Quick Inventory Table
         function updateInventoryTable(inventory) {
-            const tbody = document.querySelector("table tbody");
+            const tbody = document.querySelector("#inventory-table tbody");
             tbody.innerHTML = "";
             inventory.forEach(m => {
                 tbody.insertAdjacentHTML("beforeend", `
@@ -216,8 +249,7 @@
                         <td>
                             ${m.quantity <= m.reorder_point
                         ? '<span class="badge bg-danger">LOW</span>'
-                        : '<span class="badge bg-success">OK</span>'
-                    }
+                        : '<span class="badge bg-success">OK</span>'}
                         </td>
                     </tr>
                 `);

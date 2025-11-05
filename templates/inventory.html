@@ -8,7 +8,6 @@
         </a>
     </div>
 
-
     <div class="card-body">
         {% if materials %}
         <div class="table-responsive">
@@ -49,9 +48,9 @@
                                     <i class="bi bi-pencil-square"></i> Edit
                                 </a>
 
-                                <a href="{{ url_for('reorder', material_id=m.id) }}"
-                                    class="btn btn-outline-secondary btn-sm w-100 text-start">
-                                    <i class="bi bi-arrow-repeat"></i> Reorder
+                                <a href="{{ url_for('order_material', material_id=m.id) }}"
+                                    class="btn btn-outline-primary btn-sm w-100 text-start">
+                                    <i class="bi bi-cart-plus"></i> Order
                                 </a>
 
                                 <form method="POST" action="{{ url_for('delete_material', id=m.id) }}"
@@ -63,7 +62,6 @@
                                 </form>
                             </div>
                         </td>
-
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -76,7 +74,6 @@
             <a href="{{ url_for('add_material') }}" class="btn btn-light btn-sm">
                 <i class="bi bi-plus-lg"></i> Add Material
             </a>
-
         </div>
         {% endif %}
     </div>

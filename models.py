@@ -52,6 +52,9 @@ class UsageLog(db.Model):
     date = db.Column(db.DateTime, default=datetime.utcnow)
     material = db.relationship("Material", backref="usage_logs")
 
+    def __repr__(self):
+        return f"<UsageLog Material={self.material.name}, Used={self.used_quantity}>"
+
 
 # -------------------------
 # Sales Models
@@ -60,6 +63,9 @@ class Sale(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.DateTime, default=datetime.utcnow)
     total = db.Column(db.Float, default=0)
+
+    def __repr__(self):
+        return f"<Sale ID={self.id}, Total={self.total}>"
 
 
 class SaleItem(db.Model):
@@ -71,9 +77,12 @@ class SaleItem(db.Model):
     sale = db.relationship("Sale", backref="items")
     material = db.relationship("Material")
 
+    def __repr__(self):
+        return f"<SaleItem Material={self.material.name}, Qty={self.qty}, Price={self.price}>"
+
 
 # -------------------------
-# Reorder Request Model (New)
+# Reorder Request Model
 # -------------------------
 class ReorderRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -83,12 +92,18 @@ class ReorderRequest(db.Model):
         db.Integer, db.ForeignKey("supplier.id"), nullable=True)
     requested_qty = db.Column(db.Float, nullable=False)
     request_date = db.Column(db.DateTime, default=datetime.utcnow)
-    # Pending, Ordered, Received
+
+    # Status can be: Pending, Ordered, or Received
     status = db.Column(db.String(50), default="Pending")
 
     # Relationships
     material = db.relationship("Material", backref="reorder_requests")
     supplier = db.relationship("Supplier", backref="reorder_requests")
+
+    def mark_received(self):
+        """Mark the reorder request as received."""
+        self.status = "Received"
+        db.session.commit()
 
     def __repr__(self):
         return f"<ReorderRequest Material={self.material.name}, Status={self.status}>"
