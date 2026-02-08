@@ -1,3 +1,4 @@
+# app.py
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file
 from models import db, Material, Supplier, UsageLog, Sale, SaleItem, ReorderRequest
 from utils import get_low_stock, predict_depletion_days
@@ -5,15 +6,18 @@ from flask_migrate import Migrate
 from datetime import datetime
 import csv
 import io
+import os
 
 
 def create_app():
     app = Flask(__name__)
+
+    # ---------------- CONFIG ----------------
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///inventory.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     db.init_app(app)
-    migrate = Migrate(app, db)
+    Migrate(app, db)
 
     # ---------------- INDEX ----------------
     @app.route('/')
@@ -27,7 +31,7 @@ def create_app():
         materials = Material.query.order_by(Material.name).all()
         return render_template('inventory.html', materials=materials, low_count=len(get_low_stock()))
 
-    # ---------------- ADD MATERIAL ----------------
+    # ---------------- ADD / EDIT / DELETE MATERIAL ----------------
     @app.route('/materials/add', methods=['GET', 'POST'])
     def add_material():
         suppliers = Supplier.query.order_by(Supplier.name).all()
@@ -47,7 +51,6 @@ def create_app():
             return redirect(url_for('inventory'))
         return render_template('add_edit_material.html', suppliers=suppliers, material=None, low_count=len(get_low_stock()))
 
-    # ---------------- EDIT MATERIAL ----------------
     @app.route('/materials/<int:id>/edit', methods=['GET', 'POST'])
     def edit_material(id):
         material = Material.query.get_or_404(id)
@@ -67,7 +70,6 @@ def create_app():
             return redirect(url_for('inventory'))
         return render_template('add_edit_material.html', material=material, suppliers=suppliers, low_count=len(get_low_stock()))
 
-    # ---------------- DELETE MATERIAL ----------------
     @app.route('/materials/<int:id>/delete', methods=['POST'])
     def delete_material(id):
         material = Material.query.get_or_404(id)
@@ -97,7 +99,6 @@ def create_app():
             return redirect(url_for('notifications'))
         return render_template('order_material.html', material=material, suppliers=suppliers, low_count=len(get_low_stock()))
 
-    # ---------------- UPDATE REORDER STATUS ----------------
     @app.route('/reorder/<int:id>/update', methods=['POST'])
     def update_reorder_status(id):
         reorder = ReorderRequest.query.get_or_404(id)
@@ -124,10 +125,9 @@ def create_app():
             db.session.add(s)
             db.session.commit()
             return redirect(url_for('suppliers'))
-        suppliers = Supplier.query.order_by(Supplier.name).all()
-        return render_template('suppliers.html', suppliers=suppliers, low_count=len(get_low_stock()))
+        suppliers_list = Supplier.query.order_by(Supplier.name).all()
+        return render_template('suppliers.html', suppliers=suppliers_list, low_count=len(get_low_stock()))
 
-    # ---------------- EDIT SUPPLIER ----------------
     @app.route('/suppliers/<int:id>/edit', methods=['GET', 'POST'])
     def edit_supplier(id):
         supplier = Supplier.query.get_or_404(id)
@@ -139,7 +139,6 @@ def create_app():
             return redirect(url_for('suppliers'))
         return render_template('edit_supplier.html', supplier=supplier, low_count=len(get_low_stock()))
 
-    # ---------------- DELETE SUPPLIER ----------------
     @app.route('/suppliers/<int:id>/delete', methods=['POST'])
     def delete_supplier(id):
         s = Supplier.query.get_or_404(id)
@@ -150,8 +149,8 @@ def create_app():
     # ---------------- SALES ----------------
     @app.route('/sales')
     def sales():
-        sales = Sale.query.order_by(Sale.id.desc()).all()
-        return render_template('sales.html', sales=sales, low_count=len(get_low_stock()))
+        sales_list = Sale.query.order_by(Sale.id.desc()).all()
+        return render_template('sales.html', sales=sales_list, low_count=len(get_low_stock()))
 
     @app.route('/sales/<int:id>')
     def sale_view(id):
@@ -160,30 +159,26 @@ def create_app():
 
     @app.route('/sales/export')
     def sales_export():
-        sales = Sale.query.order_by(Sale.date.desc()).all()
+        sales_list = Sale.query.order_by(Sale.date.desc()).all()
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(['Sale ID', 'Date', 'Total (₱)', 'Items'])
-        for sale in sales:
+        for sale in sales_list:
             items = ', '.join(
-                [f"{i.material.name} × {i.qty}" for i in sale.items])
+                [f"{i.material_ref.name} × {i.qty}" for i in sale.items])
             writer.writerow([sale.id, sale.date.strftime(
                 "%Y-%m-%d %H:%M:%S"), f"₱{sale.total:.2f}", items])
         output.seek(0)
-        return send_file(
-            io.BytesIO(output.getvalue().encode('utf-8')),
-            mimetype='text/csv',
-            as_attachment=True,
-            download_name='sales_export.csv'
-        )
+        return send_file(io.BytesIO(output.getvalue().encode('utf-8')),
+                         mimetype='text/csv',
+                         as_attachment=True,
+                         download_name='sales_export.csv')
 
     # ---------------- CHECKOUT ----------------
     @app.route('/checkout', methods=['POST'])
     def checkout():
         try:
             data = request.get_json(force=True, silent=True)
-            print("📦 Received JSON (Flask):", data)
-
             if not data:
                 return jsonify({'error': 'Invalid or missing JSON data'}), 400
 
@@ -197,13 +192,8 @@ def create_app():
 
             low_stock = []
             for item in items:
-                # accept either {id,...} or {material_id,...}
-                try:
-                    material_id = int(item.get('material_id')
-                                      or item.get('id'))
-                    qty = float(item.get('qty', 0))
-                except Exception:
-                    return jsonify({'error': 'Invalid item structure (material_id/id and qty required)'}), 400
+                material_id = int(item.get('material_id') or item.get('id'))
+                qty = float(item.get('qty', 0))
 
                 material = Material.query.get(material_id)
                 if not material:
@@ -211,28 +201,19 @@ def create_app():
                 if material.quantity < qty:
                     return jsonify({'error': f'Not enough stock for {material.name}'}), 400
 
-                # Use the material's stored price_per_unit (fallback to 0.0)
                 price = float(material.price_per_unit or 0.0)
-
                 subtotal = price * qty
                 material.quantity -= qty
 
-                # NOTE: SaleItem model's column for price is 'price' (not price_per_unit)
                 sale_item = SaleItem(
                     sale_id=sale.id,
                     material_id=material.id,
                     qty=qty,
-                    price=price  # <-- use 'price' to match SaleItem model
+                    price=price
                 )
                 db.session.add(sale_item)
-
-                # UsageLog model expects used_quantity (not remaining_quantity).
-                # Record how much was used in this sale:
-                db.session.add(UsageLog(
-                    material_id=material.id,
-                    used_quantity=qty,
-                    date=datetime.utcnow()
-                ))
+                db.session.add(UsageLog(material_id=material.id,
+                               used_quantity=qty, date=datetime.utcnow()))
 
                 if material.quantity <= material.reorder_point:
                     low_stock.append(
@@ -241,16 +222,13 @@ def create_app():
                 sale.total = (sale.total or 0) + subtotal
 
             db.session.commit()
-            print("✅ Checkout OK, sale id:", sale.id)
             return jsonify({'success': True, 'message': 'Checkout successful', 'sale_id': sale.id, 'low': low_stock}), 200
 
         except Exception as e:
             db.session.rollback()
-            import traceback
-            traceback.print_exc()
             return jsonify({'error': str(e)}), 500
-    # ---------------- NOTIFICATIONS ----------------
 
+    # ---------------- NOTIFICATIONS ----------------
     @app.route('/notifications')
     def notifications():
         low = [m for m in Material.query.order_by(
@@ -279,12 +257,24 @@ def create_app():
     def about():
         return render_template('about.html', low_count=len(get_low_stock()))
 
+    # ---------------- ADMIN ----------------
+    @app.route('/sales/clear', methods=['POST'])
+    def clear_sales():
+        SaleItem.query.delete()
+        Sale.query.delete()
+        db.session.commit()
+        return redirect(url_for('sales'))
+
+    @app.route('/reset/full', methods=['POST'])
+    def full_reset():
+        # Remove all data
+        SaleItem.query.delete()
+        Sale.query.delete()
+        UsageLog.query.delete()
+        ReorderRequest.query.delete()
+        Material.query.delete()
+        Supplier.query.delete()
+        db.session.commit()
+        return redirect(url_for('index'))
+
     return app
-
-
-app = create_app()
-
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    app.run(debug=True)

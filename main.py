@@ -1,18 +1,10 @@
-import threading
-import webview
+# main.py
 from app import create_app
 
-flask_app = create_app()
+# Create the Flask app
+app = create_app()
 
-
-def start_flask():
-    flask_app.run(host='127.0.0.1', port=5000, debug=False)
-
-
-flask_thread = threading.Thread(target=start_flask)
-flask_thread.daemon = True
-flask_thread.start()
-
-webview.create_window("Construction Inventory System",
-                      "http://127.0.0.1:5000", width=1200, height=800)
-webview.start()
+if __name__ == "__main__":
+    # Local debug run (optional)
+    # On Render, this line is ignored because gunicorn will serve the app
+    app.run(debug=True)

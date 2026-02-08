@@ -30,7 +30,6 @@ def predict_depletion_days(material):
         if len(usage_logs) < 3:
             return None
 
-        # Convert log dates → number of days since first entry
         dates = np.array([
             (log.date - usage_logs[0].date).days
             for log in usage_logs
